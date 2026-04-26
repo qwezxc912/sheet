@@ -1,0 +1,5 @@
+env: "local"
+server:
+  addres: "localhost:8084"
+  timeout: 4s
+  idle_timeout: 60s
