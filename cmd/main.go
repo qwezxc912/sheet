@@ -11,12 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/qweq1232/dnd_form/internal/config"
-	chardelete "github.com/qweq1232/dnd_form/internal/http_server/handlers/chars/delete"
-	"github.com/qweq1232/dnd_form/internal/http_server/handlers/chars/get"
-	getall "github.com/qweq1232/dnd_form/internal/http_server/handlers/chars/get_all"
-	charsave "github.com/qweq1232/dnd_form/internal/http_server/handlers/chars/save"
-	charupdate "github.com/qweq1232/dnd_form/internal/http_server/handlers/chars/update"
-	storage "github.com/qweq1232/dnd_form/internal/storage/postgres"
+	"github.com/qweq1232/dnd_form/internal/service"
+	storage "github.com/qweq1232/dnd_form/internal/storage/postgres/char"
+	"github.com/qweq1232/dnd_form/internal/transport/chars/handlers"
 )
 
 const (
@@ -42,13 +39,15 @@ func main() {
 
 	log.Info("connected to database")
 
+	serv := service.New(db, db, db, db)
+	handle := handlers.New(serv, log)
+
 	r := gin.Default()
 
-	r.POST("/", charsave.New(ctx, log, db))
-	r.GET("/:user_id/:id", get.New(ctx, log, db))
-	r.GET("/:user_id", getall.New(ctx, log, db))
-	r.DELETE("/:id", chardelete.New(ctx, log, db))
-	r.PUT("/user/:id", charupdate.New(ctx, log, db))
+	r.POST("/", handle.Create(ctx))
+	r.GET("/:id", handle.Get(ctx))
+	r.DELETE("/:id", handle.Delete(ctx))
+	r.PUT("/:id", handle.Update(ctx))
 
 	go r.Run(cfg.Server.Addres)
 

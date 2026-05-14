@@ -3,10 +3,54 @@ package storage
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	models "github.com/qweq1232/dnd_form/internal/domane/models/char"
 )
 
-func (db *Storage) GetChar(ctx context.Context,
+type Storage struct {
+	Pool *pgxpool.Pool
+}
+
+const (
+	emptyValue = 0
+)
+
+func New(ctx context.Context, dsn string) (*Storage, error) {
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	stmt := `
+		CREATE TABLE IF NOT EXISTS chars (
+		id SERIAL PRIMARY KEY,
+		stats BYTEA,
+		user_id INT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+	`
+
+	if _, err = tx.Exec(ctx, stmt); err != nil {
+		return nil, err
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return &Storage{Pool: pool}, nil
+}
+
+func (db *Storage) Shutdown() {
+	db.Pool.Close()
+}
+
+func (db *Storage) Char(ctx context.Context,
 	id, userID int32,
 ) (*models.Char, error) {
 	tx, err := db.Pool.Begin(ctx)
@@ -34,7 +78,7 @@ func (db *Storage) GetChar(ctx context.Context,
 	return &char, nil
 }
 
-func (db *Storage) GetAllChar(ctx context.Context,
+func (db *Storage) AllChar(ctx context.Context,
 	userID int32,
 ) ([]models.Char, error) {
 	tx, err := db.Pool.Begin(ctx)
@@ -73,28 +117,26 @@ func (db *Storage) GetAllChar(ctx context.Context,
 func (db *Storage) SaveChar(ctx context.Context,
 	stats []byte,
 	userID int32,
-) error {
+) (int32, error) {
 	tx, err := db.Pool.Begin(ctx)
 	if err != nil {
-		return err
+		return emptyValue, err
 	}
 	defer tx.Rollback(ctx)
 
-	stmt := `INSERT INTO chars (stats, user_id) VALUES ($1, $2);`
+	stmt := `INSERT INTO chars (stats, user_id) VALUES ($1, $2) RETURNING id;`
 
-	if err != nil {
-		return err
-	}
+	var id int32
 
-	if _, err = tx.Exec(ctx, stmt, stats, userID); err != nil {
-		return err
+	if err := tx.QueryRow(ctx, stmt, stats, userID).Scan(&id); err != nil {
+		return emptyValue, err
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return err
+		return emptyValue, err
 	}
 
-	return nil
+	return id, nil
 }
 
 func (db *Storage) DeleteChar(ctx context.Context, id int32) error {
